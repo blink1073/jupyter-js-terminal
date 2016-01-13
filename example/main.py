@@ -2,30 +2,30 @@
 Copyright (c) Jupyter Development Team.
 Distributed under the terms of the Modified BSD License.
 """
+import re
 import subprocess
 import sys
-
-import webbrowser
+import threading
 import tornado.web
+
+PORT = 8765
 
 
 class MainPageHandler(tornado.web.RequestHandler):
 
+    def initialize(self, ws_url):
+        self.ws_url = ws_url
+
     def get(self):
-        return self.render("index.html", static=self.static_url)
+        return self.render("index.html", static=self.static_url,
+                           ws_url=self.ws_url)
 
 
 def main(argv):
 
-    url = "http://localhost:8765"
+    url = "http://localhost:%s" % PORT
 
-    handlers = [
-        (r"/", MainPageHandler),
-        (r'/(.*)', tornado.web.StaticFileHandler,
-         {'path': '.'}),
-    ]
-
-    nb_command = [sys.executable, '-m', 'notebook', '--no-browser',
+    nb_command = [sys.executable, '-m', 'notebook', '--no-browser', '--debug',
                   '--NotebookApp.allow_origin="%s"' % url]
     nb_server = subprocess.Popen(nb_command, stderr=subprocess.STDOUT,
                                  stdout=subprocess.PIPE)
@@ -36,20 +36,40 @@ def main(argv):
         if not line:
             continue
         print(line)
-        if 'The IPython Notebook is running at: http://localhost:8888/':
+        if 'Jupyter Notebook is running at:' in line:
+            host = re.search('http(.*?)$', line).groups()[0]
+            ws_url = 'ws' + host
             break
+
+    while 1:
+        line = nb_server.stdout.readline().decode('utf-8').strip()
+        if not line:
+            continue
+        print(line)
         if 'Control-C' in line:
-            raise ValueError(
-                'The port 8888 was already taken, kill running notebook servers'
-            )
+            break
+
+    def print_thread():
+        while 1:
+            line = nb_server.stdout.readline().decode('utf-8').strip()
+            if not line:
+                continue
+            print(line)
+    thread = threading.Thread(target=print_thread, daemon=True)
+    thread.start()
+
+    handlers = [
+        (r"/", MainPageHandler, {'ws_url': ws_url}),
+        (r'/(.*)', tornado.web.StaticFileHandler,
+         {'path': '.'}),
+    ]
 
     app = tornado.web.Application(handlers, static_path='build',
                                   template_path='.')
 
-    app.listen(8765, 'localhost')
+    app.listen(PORT, 'localhost')
     loop = tornado.ioloop.IOLoop.instance()
-    print('Browse to http://localhost:8765')
-    #loop.add_callback(webbrowser.open, url)
+    print('Browse to http://localhost:%s' % PORT)
     try:
         loop.start()
     except KeyboardInterrupt:

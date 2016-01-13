@@ -2,9 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
+    <link rel="stylesheet" type="text/css" href="index.css">
     <title>Jupyter Terminal Demo</title>
   </head>
   <body>
-    <script src="bundle.js"></script>
+    <script id='jupyter-config-data' type="application/json">{ "wsUrl": "{{ws_url}}" }</script>
+    <script src="build/bundle.js"></script>
+
   </body>
 </html>
